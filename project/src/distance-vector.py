@@ -19,17 +19,21 @@ class RoutingTable(object):
 
         formatted_routing_table = []
         for key, value in self.routing_table.iteritems():
-            formatted_routing_table.append([key, value[0]])
+            if value is None:
+                formatted_routing_table.append([key, None])
+            else:
+                formatted_routing_table.append([key, value[0]])
 
         distance_vector_message['routing_table'] = formatted_routing_table
         return distance_vector_message
 
     def update_routing_table(self, distance_vector_message, link):
-        updated_destinations = []
+        # format: {destination_address: action==('Upserted', 'Deleted')}
+        updated_destinations = dict()
         routing_table_entries = distance_vector_message['routing_table']
 
         for entry in routing_table_entries:
-            updated_destinations += self.upsert_routing_table_entry(entry, link)
+            updated_destinations.update(self.upsert_routing_table_entry(entry, link))
 
         return updated_destinations
 
@@ -37,15 +41,27 @@ class RoutingTable(object):
         # routing_table_entry format: [destination_address cost]
         # also: see line above self.get_routing_table() for additional information
 
-        updated_destinations = []
+        # format: {destination_address: action==('Upserted', 'Deleted')}
+        updated_destinations = dict()
 
         destination_address = routing_table_entry[0]
         new_route_cost = routing_table_entry[1]
 
-        if self.routing_table.get(destination_address) is None \
+        if new_route_cost is None:
+            if self.routing_table.get(destination_address) is not None:
+                routing_table_link = self.routing_table[destination_address][1]
+
+                # if that link is being used
+                if link is routing_table_link:
+                    deleted_addresses = self.remove_routing_table_entry(routing_table_link)
+                    for address in deleted_addresses:
+                        updated_destinations[address] = 'Deleted'
+
+            return
+        elif self.routing_table.get(destination_address) is None \
                 or (new_route_cost + 1) < self.routing_table[destination_address][0]:
             self.routing_table[destination_address] = [routing_table_entry[1] + 1, link]
-            updated_destinations.append(destination_address)
+            updated_destinations[destination_address] = 'Upserted'
 
         return updated_destinations
 
@@ -61,12 +77,14 @@ class RoutingTable(object):
         return this_address, updated
 
     # remove routing_table_entry after the link has gone dead.
-    def remove_routing_table_entry(self, link_address):
+    def remove_routing_table_entry(self, link):
+        deleted_destination_address = []
         for entry, value in self.routing_table.iteritems():
-            if value[1] == link_address:
-                del self.routing_table[entry]
+            if value[1] == link:
+                self.routing_table[entry] = None
+                deleted_destination_address.append(entry)
 
-        # TODO: REMOVE node.forwarding_table entries!!
+        return deleted_destination_address
 
 class DistanceVectorApp(object):
     def __init__(self, node):
@@ -80,9 +98,12 @@ class DistanceVectorApp(object):
         updated_destination_addresses = self.routing_table.update_routing_table(routing_table, link)
         updated_routing_table = len(updated_destination_addresses) > 0
 
-        for destination_address in updated_destination_addresses:
+        for destination_address, update_type in updated_destination_addresses.iteritems():
             # print "Updated Destination Address:" + str(destination_address) + ", to link: " + str(link)
-            self.node.add_forwarding_entry(destination_address, link)
+            if update_type == 'Upserted':
+                self.node.add_forwarding_entry(destination_address, link)
+            elif update_type == 'Deleted':
+                self.node.delete_forwarding_entry(destination_address, link)
 
         return updated_routing_table
 
@@ -111,7 +132,7 @@ if __name__ == '__main__':
     Sim.set_debug(True)
 
     # setup network
-    net = Network('../networks/fifteen-nodes.txt')
+    net = Network('../networks/five-nodes.txt')
 
     # get nodes
     n1 = net.get_node('n1')
@@ -119,6 +140,16 @@ if __name__ == '__main__':
     n3 = net.get_node('n3')
     n4 = net.get_node('n4')
     n5 = net.get_node('n5')
+    # n6 = net.get_node('n6')
+    # n7 = net.get_node('n7')
+    # n8 = net.get_node('n8')
+    # n9 = net.get_node('n9')
+    # n10 = net.get_node('n10')
+    # n11 = net.get_node('n11')
+    # n12 = net.get_node('n12')
+    # n13 = net.get_node('n13')
+    # n14 = net.get_node('n14')
+    # n15 = net.get_node('n15')
 
     # setup broadcast application
     d1 = DistanceVectorApp(n1)
@@ -131,6 +162,26 @@ if __name__ == '__main__':
     n4.add_protocol(protocol="dvrouting",handler=d4)
     d5 = DistanceVectorApp(n5)
     n5.add_protocol(protocol="dvrouting",handler=d5)
+    # d6 = DistanceVectorApp(n6)
+    # n6.add_protocol(protocol="dvrouting", handler=d6)
+    # d7 = DistanceVectorApp(n7)
+    # n7.add_protocol(protocol="dvrouting", handler=d7)
+    # d8 = DistanceVectorApp(n8)
+    # n8.add_protocol(protocol="dvrouting", handler=d8)
+    # d9 = DistanceVectorApp(n9)
+    # n9.add_protocol(protocol="dvrouting", handler=d9)
+    # d10 = DistanceVectorApp(n10)
+    # n10.add_protocol(protocol="dvrouting", handler=d10)
+    # d11 = DistanceVectorApp(n11)
+    # n11.add_protocol(protocol="dvrouting", handler=d11)
+    # d12 = DistanceVectorApp(n12)
+    # n12.add_protocol(protocol="dvrouting", handler=d12)
+    # d13 = DistanceVectorApp(n13)
+    # n13.add_protocol(protocol="dvrouting", handler=d13)
+    # d14 = DistanceVectorApp(n14)
+    # n14.add_protocol(protocol="dvrouting", handler=d14)
+    # d15 = DistanceVectorApp(n15)
+    # n15.add_protocol(protocol="dvrouting", handler=d15)
 
     d1.broadcast_routing_table()
 
