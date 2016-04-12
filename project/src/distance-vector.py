@@ -93,6 +93,7 @@ class DistanceVectorApp(object):
         self.node = node
         self.source_address = None
         self.routing_table = RoutingTable()
+        self.broadcast_count = 0
 
     def upsert_forwarding_table(self, routing_table, link):
         updated_destination_addresses = self.routing_table.update_routing_table(routing_table, link)
@@ -115,16 +116,21 @@ class DistanceVectorApp(object):
         updated_forwarding_table = self.upsert_forwarding_table(received_packet.body, link)
 
         if updated_forwarding_table or updated_self_link:
-            self.broadcast_routing_table()
-            print ("%d, %s, Updated Routing Table Values:" + str(self.routing_table.get_routing_table())) % (
+            print ("%d, %s, Updated Routing Table Values:" + str(self.routing_table.get_routing_table())) % (Sim.scheduler.current_time(), self.node.hostname)
 
-        Sim.scheduler.current_time(), self.node.hostname)
-
-    def broadcast_routing_table(self):
+    def broadcast_routing_table(self,event):
         distance_vector_message = self.routing_table.get_routing_table()
         distance_vector_message['hostname'] = self.node.hostname
         routing_table_packet = packet.Packet(destination_address=0, ident=0, ttl=1, protocol='dvrouting', body=distance_vector_message)
-        Sim.scheduler.add(delay=0, event=routing_table_packet, handler=self.node.send_packet)
+
+        if self.broadcast_count < 100:
+            Sim.scheduler.add(delay=0, event=routing_table_packet, handler=self.node.send_packet)
+            Sim.scheduler.add(delay=30, event="", handler=self.broadcast_routing_table)
+            self.broadcast_count += 1
+        else:
+            print "----------> ENDING <----------"
+
+
 
 if __name__ == '__main__':
     # parameters
@@ -183,21 +189,21 @@ if __name__ == '__main__':
     # d15 = DistanceVectorApp(n15)
     # n15.add_protocol(protocol="dvrouting", handler=d15)
 
-    d1.broadcast_routing_table()
-
-    # send a broadcast packet from 1 with TTL 2, so everyone should get it
-    # p = packet.Packet(source_address=n1.get_address('n2'),destination_address=0,ident=1,ttl=2,protocol='dvrouting',length=100)
-    # Sim.scheduler.add(delay=0, event=p, handler=n1.send_packet)
-
-    # send a broadcast packet from 1 with TTL 1, so just nodes 2 and 3
-    # should get it
-    # p = packet.Packet(source_address=n1.get_address('n2'),destination_address=0,ident=2,ttl=1,protocol='dvrouting',length=100)
-    # Sim.scheduler.add(delay=1, event=p, handler=n1.send_packet)
-
-    # send a broadcast packet from 3 with TTL 1, so just nodes 1, 4, and 5
-    # should get it
-    # p = packet.Packet(source_address=n3.get_address('n1'),destination_address=0,ident=3,ttl=1,protocol='dvrouting',length=100)
-    # Sim.scheduler.add(delay=2, event=p, handler=n3.send_packet)
+    d1.broadcast_routing_table("")
+    d2.broadcast_routing_table("")
+    d3.broadcast_routing_table("")
+    d4.broadcast_routing_table("")
+    d5.broadcast_routing_table("")
+    # d6.broadcast_routing_table("")
+    # d7.broadcast_routing_table("")
+    # d8.broadcast_routing_table("")
+    # d9.broadcast_routing_table("")
+    # d10.broadcast_routing_table("")
+    # d11.broadcast_routing_table("")
+    # d12.broadcast_routing_table("")
+    # d13.broadcast_routing_table("")
+    # d14.broadcast_routing_table("")
+    # d15.broadcast_routing_table("")
 
     # run the simulation
     Sim.scheduler.run()
