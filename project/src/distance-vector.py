@@ -95,6 +95,9 @@ class DistanceVectorApp(object):
         self.routing_table = RoutingTable()
         self.broadcast_count = 0
 
+        # format: {hostname: last_update_time}
+        self.last_contact_list = dict()
+
     def upsert_forwarding_table(self, routing_table, link):
         updated_destination_addresses = self.routing_table.update_routing_table(routing_table, link)
         updated_routing_table = len(updated_destination_addresses) > 0
@@ -103,6 +106,7 @@ class DistanceVectorApp(object):
             # print "Updated Destination Address:" + str(destination_address) + ", to link: " + str(link)
             if update_type == 'Upserted':
                 self.node.add_forwarding_entry(destination_address, link)
+                print "Upserted (%s), DA: %s, Link_Start: %s, Link_End: %s" % (self.node.hostname, destination_address, link.startpoint.hostname, link.endpoint.hostname)
             elif update_type == 'Deleted':
                 self.node.delete_forwarding_entry(destination_address, link)
 
@@ -113,10 +117,34 @@ class DistanceVectorApp(object):
         hostname = received_packet.body['hostname']
         self.source_address, updated_self_link = self.routing_table.check_link_to_self(self.node, hostname)
         link = self.node.get_link(hostname)
+        self.check_for_inactive_links(hostname)
         updated_forwarding_table = self.upsert_forwarding_table(received_packet.body, link)
 
         if updated_forwarding_table or updated_self_link:
             print ("%d, %s, Updated Routing Table Values:" + str(self.routing_table.get_routing_table())) % (Sim.scheduler.current_time(), self.node.hostname)
+
+    def check_for_inactive_links(self, hostname):
+        current_time = Sim.scheduler.current_time()
+
+        self.last_contact_list[hostname] = current_time
+        print "Node: %s; Updated Hostname: %s" % (self.node.hostname, hostname)
+
+        for contact_hostname, last_contact_time in self.last_contact_list.iteritems():
+            if current_time - self.last_contact_list[hostname] >= 90:
+                print "ERROR!"
+            print "---->   %d: Node: %s; Hostname: %s; Last_Contact: %d seconds ago" % (current_time, self.node.hostname, contact_hostname, current_time - self.last_contact_list[hostname])
+
+        # links_to_remove = []
+        #
+        # for link, last_heartbeat in self.link_tracker.iteritems():
+        #     if current_time - last_heartbeat >= 90:
+        #         links_to_remove.append(self.link_tracker[link])
+        #         self.routing_table.remove_routing_table_entry(link)
+        #         self.node.delete_forwarding_entry(self.source_address, link)
+        #         print "** REMOVED FORWARDING ENTRY**"
+        #
+        # for link in links_to_remove:
+        #     del self.link_tracker[link]
 
     def broadcast_routing_table(self,event):
         distance_vector_message = self.routing_table.get_routing_table()
@@ -129,6 +157,11 @@ class DistanceVectorApp(object):
             self.broadcast_count += 1
         else:
             print "----------> ENDING <----------"
+
+        if self.node.hostname == 'n1':
+            Sim.scheduler.add(delay=0, event=None, handler=n1.get_link('n2').down)
+            Sim.scheduler.add(delay=0, event=None, handler=n1.get_link('n3').down)
+            print "---> Deactivated link <---"
 
 
 
